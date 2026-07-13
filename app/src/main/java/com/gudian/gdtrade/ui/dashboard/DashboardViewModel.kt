@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.gudian.gdtrade.data.ai.AiOpinionRepository
-import com.gudian.gdtrade.data.ai.ProxyGptOpinionRepository
 import com.gudian.gdtrade.data.repository.LocalPreferenceRepository
 import com.gudian.gdtrade.data.repository.MarketRepository
 import com.gudian.gdtrade.data.repository.PortfolioRepository
@@ -25,7 +23,6 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(
     private val portfolioRepository: PortfolioRepository,
     private val marketRepository: MarketRepository,
-    private val aiOpinionRepository: AiOpinionRepository = ProxyGptOpinionRepository(),
     private val riskEngine: RiskEngine = RiskEngine()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -48,36 +45,49 @@ class DashboardViewModel(
                     quotes = quotes,
                     candidates = riskCheckedCandidates,
                     tradeRecords = records,
-                    isAiOpinionLoading = _uiState.value.isAiOpinionLoading,
-                    aiOpinion = _uiState.value.aiOpinion,
-                    aiPotentialStocks = _uiState.value.aiPotentialStocks
+                    chatGptPrompt = _uiState.value.chatGptPrompt
                 )
             }.collect { _uiState.value = it }
         }
     }
 
-
     fun refreshMarketQuotes() {
         viewModelScope.launch { marketRepository.refreshMarketQuotes() }
     }
 
-    fun requestAiOpinion() {
+    fun buildChatGptPrompt(): String {
         val snapshot = _uiState.value
-        _uiState.value = snapshot.copy(isAiOpinionLoading = true, aiOpinion = "GPT研究意见生成中...")
-        viewModelScope.launch {
-            val result = aiOpinionRepository.requestOpinion(
-                positions = snapshot.positions,
-                quotes = snapshot.quotes,
-                candidates = snapshot.candidates,
-                tradeRecords = snapshot.tradeRecords
-            )
-            _uiState.value = _uiState.value.copy(
-                isAiOpinionLoading = false,
-                aiOpinion = result.content,
-                aiPotentialStocks = result.content
-            )
+        val prompt = buildString {
+            appendLine("请作为A股持仓研究辅助助手，基于以下数据给出中文分析。")
+            appendLine("重要边界：不提供确定性买卖指令，不承诺收益，不自动交易；请明确风险、观察条件、风险否决条件和人工确认清单。")
+            appendLine()
+            appendLine("一、当前持仓")
+            snapshot.positions.forEach { position ->
+                val quote = snapshot.quotes.firstOrNull { it.symbol == position.symbol }
+                appendLine("- ${position.symbol} ${position.name}：${position.quantity} 股/份；备注：${position.note}；参考价：${quote?.lastPrice ?: "--"}；涨跌幅：${quote?.changePercent ?: "--"}；来源：${quote?.sourceLabel ?: "无"}")
+            }
+            appendLine()
+            appendLine("二、动态观察池")
+            snapshot.candidates.forEach { candidate ->
+                appendLine("- ${candidate.symbol} ${candidate.name}：主题=${candidate.theme}；信号=${candidate.signalStatus.displayName}；风险否决=${candidate.riskDeniedBuy}；理由=${candidate.reason}")
+            }
+            appendLine()
+            appendLine("三、最近交易记录")
+            snapshot.tradeRecords.take(10).forEach { record ->
+                appendLine("- ${record.tradeDate} ${record.name} ${record.side.displayName} ${record.quantity} 股/份，价格=${record.price}，备注=${record.note}")
+            }
+            appendLine()
+            appendLine("请输出：")
+            appendLine("1. 当前持仓风险排序；")
+            appendLine("2. 值得继续跟踪的潜力股票候选，说明触发条件；")
+            appendLine("3. 暂不追高或需要等待回调的标的；")
+            appendLine("4. 哪些买入想法应被风险引擎否决；")
+            appendLine("5. 下一次人工确认前需要检查的数据。")
         }
+        _uiState.value = snapshot.copy(chatGptPrompt = prompt)
+        return prompt
     }
+
     fun addPosition(symbol: String, name: String, quantityText: String, note: String) {
         val quantity = quantityText.toIntOrNull() ?: return
         viewModelScope.launch {
@@ -166,8 +176,7 @@ class DashboardViewModel(
             val repository = LocalPreferenceRepository(context.applicationContext)
             return DashboardViewModel(
                 portfolioRepository = repository,
-                marketRepository = repository,
-                aiOpinionRepository = ProxyGptOpinionRepository()
+                marketRepository = repository
             ) as T
         }
     }

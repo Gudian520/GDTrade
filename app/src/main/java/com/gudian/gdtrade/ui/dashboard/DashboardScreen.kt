@@ -49,7 +49,8 @@ import java.time.LocalDate
 @Composable
 fun DashboardRoute(
     viewModel: DashboardViewModel,
-    onOpenTongHuaShun: (String) -> Unit
+    onOpenTongHuaShun: (String) -> Unit,
+    onCopyText: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     DashboardScreen(
@@ -63,7 +64,7 @@ fun DashboardRoute(
         onRemoveTradeRecord = viewModel::removeTradeRecord,
         onResetLocalData = viewModel::resetLocalData,
         onRefreshMarket = viewModel::refreshMarketQuotes,
-        onRequestAiOpinion = viewModel::requestAiOpinion
+        onCopyChatGptPrompt = { onCopyText(viewModel.buildChatGptPrompt()) }
     )
 }
 
@@ -79,7 +80,7 @@ fun DashboardScreen(
     onRemoveTradeRecord: (String) -> Unit,
     onResetLocalData: () -> Unit,
     onRefreshMarket: () -> Unit,
-    onRequestAiOpinion: () -> Unit
+    onCopyChatGptPrompt: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -92,8 +93,13 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Header(uiState.disclosure)
         }
-        item { MarketActionSection(uiState, onRefreshMarket, onRequestAiOpinion) }
-        item { AiPotentialSection(uiState.aiPotentialStocks) }
+        item { SectionTitle("当前持仓") }
+        items(uiState.positions, key = { "position-${it.symbol}" }) { position ->
+            val quote = uiState.quotes.firstOrNull { it.symbol == position.symbol }
+            PositionCard(position, quote, onOpenTongHuaShun, onRemovePosition)
+        }
+        item { MarketActionSection(uiState, onRefreshMarket, onCopyChatGptPrompt) }
+        item { AiPotentialSection(uiState.chatGptPrompt) }
         item {
             LocalDataEditor(
                 onAddPosition = onAddPosition,
@@ -122,7 +128,7 @@ private fun AiPotentialSection(content: String) {
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SectionTitle("GPT跟踪潜力股票")
+            SectionTitle("ChatGPT潜力股票分析提示词")
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodyMedium,
@@ -135,7 +141,7 @@ private fun AiPotentialSection(content: String) {
 private fun MarketActionSection(
     uiState: DashboardUiState,
     onRefreshMarket: () -> Unit,
-    onRequestAiOpinion: () -> Unit
+    onCopyChatGptPrompt: () -> Unit
 ) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -150,11 +156,11 @@ private fun MarketActionSection(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRefreshMarket) { Text("刷新行情") }
-                OutlinedButton(onClick = onRequestAiOpinion, enabled = !uiState.isAiOpinionLoading) {
-                    Text(if (uiState.isAiOpinionLoading) "生成中" else "GPT研究意见")
+                OutlinedButton(onClick = onCopyChatGptPrompt) {
+                    Text("复制给ChatGPT")
                 }
             }
-            Text(text = uiState.aiOpinion, style = MaterialTheme.typography.bodyMedium)
+            Text(text = "不需要 API Key。点击复制后，直接粘贴到 ChatGPT Plus。", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -477,7 +483,8 @@ private fun MarketQuote.quoteDisplay(): String {
 private fun DashboardPreview() {
     GDTradeTheme {
         DashboardScreen(
-            uiState = DashboardUiState(                positions = StaticPortfolioRepositoryPreview.positions,
+            uiState = DashboardUiState(
+                positions = StaticPortfolioRepositoryPreview.positions,
                 quotes = StaticPortfolioRepositoryPreview.quotes,
                 candidates = StaticPortfolioRepositoryPreview.candidates,
                 tradeRecords = StaticPortfolioRepositoryPreview.records
@@ -491,7 +498,7 @@ private fun DashboardPreview() {
             onRemoveTradeRecord = {},
             onResetLocalData = {},
             onRefreshMarket = {},
-            onRequestAiOpinion = {}
+            onCopyChatGptPrompt = {}
         )
     }
 }

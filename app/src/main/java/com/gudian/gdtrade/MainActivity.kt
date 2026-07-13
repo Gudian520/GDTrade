@@ -1,6 +1,9 @@
 package com.gudian.gdtrade
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -23,12 +26,19 @@ class MainActivity : ComponentActivity() {
             GDTradeTheme {
                 DashboardRoute(
                     viewModel = viewModel,
-                    onOpenTongHuaShun = ::openTongHuaShun
+                    onOpenTongHuaShun = ::openTongHuaShun,
+                    onCopyText = ::copyTextToClipboard
                 )
             }
         }
     }
 
+
+    private fun copyTextToClipboard(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("GD Trade ChatGPT分析提示词", text))
+        Toast.makeText(this, "已复制，可粘贴到 ChatGPT Plus。", Toast.LENGTH_SHORT).show()
+    }
     private fun openTongHuaShun(symbol: String) {
         val marketPrefix = when {
             symbol.startsWith("6") -> "sh"
