@@ -8,4 +8,10 @@ interface MarketRepository {
     fun observeQuotes(symbols: List<String>): Flow<List<MarketQuote>>
 
     fun observeCandidates(): Flow<List<StockCandidate>>
+
+    suspend fun addCandidate(candidate: StockCandidate)
+
+    suspend fun removeCandidate(symbol: String)
+
+    suspend fun resetMarketData()
 }

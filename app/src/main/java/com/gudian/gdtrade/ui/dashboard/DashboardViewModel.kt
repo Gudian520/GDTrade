@@ -1,13 +1,19 @@
-﻿package com.gudian.gdtrade.ui.dashboard
+package com.gudian.gdtrade.ui.dashboard
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.gudian.gdtrade.data.repository.LocalPreferenceRepository
 import com.gudian.gdtrade.data.repository.MarketRepository
 import com.gudian.gdtrade.data.repository.PortfolioRepository
-import com.gudian.gdtrade.data.repository.StaticMarketRepository
-import com.gudian.gdtrade.data.repository.StaticPortfolioRepository
+import com.gudian.gdtrade.domain.model.Position
+import com.gudian.gdtrade.domain.model.SignalStatus
+import com.gudian.gdtrade.domain.model.StockCandidate
+import com.gudian.gdtrade.domain.model.TradeRecord
+import com.gudian.gdtrade.domain.model.TradeSide
 import com.gudian.gdtrade.domain.risk.RiskEngine
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,36 +30,117 @@ class DashboardViewModel(
 
     init {
         viewModelScope.launch {
-            portfolioRepository.observePositions().collect { positions ->
-                val symbols = positions.map { it.symbol }
-                combine(
-                    portfolioRepository.observeAccountGoals(),
-                    marketRepository.observeQuotes(symbols),
-                    marketRepository.observeCandidates(),
-                    portfolioRepository.observeTradeRecords()
-                ) { goals, quotes, candidates, records ->
-                    val riskCheckedCandidates = candidates.map { candidate ->
-                        val decision = riskEngine.evaluate(candidate)
-                        candidate.copy(riskDeniedBuy = !decision.allowed)
-                    }
-                    DashboardUiState(
-                        accountGoals = goals,
-                        positions = positions,
-                        quotes = quotes,
-                        candidates = riskCheckedCandidates,
-                        tradeRecords = records
-                    )
-                }.collect { _uiState.value = it }
-            }
+            combine(
+                portfolioRepository.observeAccountGoals(),
+                portfolioRepository.observePositions(),
+                marketRepository.observeQuotes(emptyList()),
+                marketRepository.observeCandidates(),
+                portfolioRepository.observeTradeRecords()
+            ) { goals, positions, quotes, candidates, records ->
+                val riskCheckedCandidates = candidates.map { candidate ->
+                    val decision = riskEngine.evaluate(candidate)
+                    candidate.copy(riskDeniedBuy = !decision.allowed)
+                }
+                DashboardUiState(
+                    accountGoals = goals,
+                    positions = positions,
+                    quotes = quotes,
+                    candidates = riskCheckedCandidates,
+                    tradeRecords = records
+                )
+            }.collect { _uiState.value = it }
         }
     }
 
-    class Factory : ViewModelProvider.Factory {
+    fun addPosition(symbol: String, name: String, quantityText: String, note: String) {
+        val quantity = quantityText.toIntOrNull() ?: return
+        viewModelScope.launch {
+            portfolioRepository.addPosition(
+                Position(
+                    symbol = symbol.trim(),
+                    name = name.trim(),
+                    quantity = quantity,
+                    note = note.ifBlank { "用户手动维护。" }
+                )
+            )
+        }
+    }
+
+    fun removePosition(symbol: String) {
+        viewModelScope.launch { portfolioRepository.removePosition(symbol) }
+    }
+
+    fun addCandidate(
+        symbol: String,
+        name: String,
+        theme: String,
+        reason: String,
+        signalStatus: SignalStatus,
+        riskDeniedBuy: Boolean
+    ) {
+        viewModelScope.launch {
+            marketRepository.addCandidate(
+                StockCandidate(
+                    symbol = symbol.trim(),
+                    name = name.trim(),
+                    theme = theme.ifBlank { "用户观察" },
+                    reason = reason.ifBlank { "用户手动加入观察池。" },
+                    signalStatus = signalStatus,
+                    riskDeniedBuy = riskDeniedBuy
+                )
+            )
+        }
+    }
+
+    fun removeCandidate(symbol: String) {
+        viewModelScope.launch { marketRepository.removeCandidate(symbol) }
+    }
+
+    fun addTradeRecord(
+        dateText: String,
+        symbol: String,
+        name: String,
+        side: TradeSide,
+        priceText: String,
+        quantityText: String,
+        note: String
+    ) {
+        val date = runCatching { LocalDate.parse(dateText.trim()) }.getOrNull() ?: return
+        val price = priceText.toDoubleOrNull() ?: return
+        val quantity = quantityText.toIntOrNull() ?: return
+        viewModelScope.launch {
+            portfolioRepository.addTradeRecord(
+                TradeRecord(
+                    tradeDate = date,
+                    symbol = symbol.trim(),
+                    name = name.trim(),
+                    side = side,
+                    price = price,
+                    quantity = quantity,
+                    note = note.ifBlank { "用户手动记录。" }
+                )
+            )
+        }
+    }
+
+    fun removeTradeRecord(recordKey: String) {
+        viewModelScope.launch { portfolioRepository.removeTradeRecord(recordKey) }
+    }
+
+    fun resetLocalData() {
+        viewModelScope.launch {
+            portfolioRepository.resetPortfolioData()
+            marketRepository.resetMarketData()
+        }
+    }
+
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            val repository = LocalPreferenceRepository(context.applicationContext)
             return DashboardViewModel(
-                portfolioRepository = StaticPortfolioRepository(),
-                marketRepository = StaticMarketRepository()
+                portfolioRepository = repository,
+                marketRepository = repository
             ) as T
         }
     }

@@ -43,4 +43,14 @@ class StaticPortfolioRepository : PortfolioRepository {
             )
         )
     )
+
+    override suspend fun addPosition(position: Position) = Unit
+
+    override suspend fun removePosition(symbol: String) = Unit
+
+    override suspend fun addTradeRecord(record: TradeRecord) = Unit
+
+    override suspend fun removeTradeRecord(recordKey: String) = Unit
+
+    override suspend fun resetPortfolioData() = Unit
 }

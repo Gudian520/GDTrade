@@ -14,7 +14,7 @@ import com.gudian.gdtrade.ui.theme.GDTradeTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: DashboardViewModel by viewModels {
-        DashboardViewModel.Factory()
+        DashboardViewModel.Factory(applicationContext)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

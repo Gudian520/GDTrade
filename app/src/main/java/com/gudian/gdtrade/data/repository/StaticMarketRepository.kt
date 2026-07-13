@@ -49,8 +49,14 @@ class StaticMarketRepository : MarketRepository {
     )
 
     override fun observeQuotes(symbols: List<String>): Flow<List<MarketQuote>> {
-        return flowOf(quotes.filter { it.symbol in symbols })
+        return flowOf(if (symbols.isEmpty()) quotes else quotes.filter { it.symbol in symbols })
     }
 
     override fun observeCandidates(): Flow<List<StockCandidate>> = flowOf(candidates)
+
+    override suspend fun addCandidate(candidate: StockCandidate) = Unit
+
+    override suspend fun removeCandidate(symbol: String) = Unit
+
+    override suspend fun resetMarketData() = Unit
 }

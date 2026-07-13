@@ -11,4 +11,14 @@ interface PortfolioRepository {
     fun observePositions(): Flow<List<Position>>
 
     fun observeTradeRecords(): Flow<List<TradeRecord>>
+
+    suspend fun addPosition(position: Position)
+
+    suspend fun removePosition(symbol: String)
+
+    suspend fun addTradeRecord(record: TradeRecord)
+
+    suspend fun removeTradeRecord(recordKey: String)
+
+    suspend fun resetPortfolioData()
 }
