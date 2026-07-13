@@ -37,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.gudian.gdtrade.domain.model.AccountGoal
 import com.gudian.gdtrade.domain.model.MarketQuote
 import com.gudian.gdtrade.domain.model.Position
 import com.gudian.gdtrade.domain.model.SignalStatus
@@ -93,8 +92,8 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Header(uiState.disclosure)
         }
-        item { GoalSection(uiState.accountGoals) }
         item { MarketActionSection(uiState, onRefreshMarket, onRequestAiOpinion) }
+        item { AiPotentialSection(uiState.aiPotentialStocks) }
         item {
             LocalDataEditor(
                 onAddPosition = onAddPosition,
@@ -102,11 +101,6 @@ fun DashboardScreen(
                 onAddTradeRecord = onAddTradeRecord,
                 onResetLocalData = onResetLocalData
             )
-        }
-        item { SectionTitle("当前持仓") }
-        items(uiState.positions, key = { "position-${it.symbol}" }) { position ->
-            val quote = uiState.quotes.firstOrNull { it.symbol == position.symbol }
-            PositionCard(position, quote, onOpenTongHuaShun, onRemovePosition)
         }
         item { SectionTitle("动态观察池") }
         items(uiState.candidates, key = { "candidate-${it.symbol}" }) { candidate ->
@@ -120,6 +114,23 @@ fun DashboardScreen(
     }
 }
 
+
+@Composable
+private fun AiPotentialSection(content: String) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SectionTitle("GPT跟踪潜力股票")
+            Text(
+                text = content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f)
+            )
+        }
+    }
+}
 @Composable
 private fun MarketActionSection(
     uiState: DashboardUiState,
@@ -163,29 +174,6 @@ private fun Header(disclosure: String) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
         )
-    }
-}
-
-@Composable
-private fun GoalSection(goals: List<AccountGoal>) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SectionTitle("账户阶段目标")
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                goals.forEach { goal ->
-                    AssistChip(onClick = {}, label = { Text("${goal.amount}") })
-                }
-            }
-        }
     }
 }
 
@@ -489,9 +477,7 @@ private fun MarketQuote.quoteDisplay(): String {
 private fun DashboardPreview() {
     GDTradeTheme {
         DashboardScreen(
-            uiState = DashboardUiState(
-                accountGoals = listOf(11500, 12500, 13800, 15000).map { AccountGoal(it, false) },
-                positions = StaticPortfolioRepositoryPreview.positions,
+            uiState = DashboardUiState(                positions = StaticPortfolioRepositoryPreview.positions,
                 quotes = StaticPortfolioRepositoryPreview.quotes,
                 candidates = StaticPortfolioRepositoryPreview.candidates,
                 tradeRecords = StaticPortfolioRepositoryPreview.records

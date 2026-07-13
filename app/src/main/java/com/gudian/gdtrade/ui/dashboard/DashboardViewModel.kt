@@ -34,24 +34,23 @@ class DashboardViewModel(
     init {
         viewModelScope.launch {
             combine(
-                portfolioRepository.observeAccountGoals(),
                 portfolioRepository.observePositions(),
                 marketRepository.observeQuotes(emptyList()),
                 marketRepository.observeCandidates(),
                 portfolioRepository.observeTradeRecords()
-            ) { goals, positions, quotes, candidates, records ->
+            ) { positions, quotes, candidates, records ->
                 val riskCheckedCandidates = candidates.map { candidate ->
                     val decision = riskEngine.evaluate(candidate)
                     candidate.copy(riskDeniedBuy = !decision.allowed)
                 }
                 DashboardUiState(
-                    accountGoals = goals,
                     positions = positions,
                     quotes = quotes,
                     candidates = riskCheckedCandidates,
                     tradeRecords = records,
                     isAiOpinionLoading = _uiState.value.isAiOpinionLoading,
-                    aiOpinion = _uiState.value.aiOpinion
+                    aiOpinion = _uiState.value.aiOpinion,
+                    aiPotentialStocks = _uiState.value.aiPotentialStocks
                 )
             }.collect { _uiState.value = it }
         }
@@ -74,7 +73,8 @@ class DashboardViewModel(
             )
             _uiState.value = _uiState.value.copy(
                 isAiOpinionLoading = false,
-                aiOpinion = result.content
+                aiOpinion = result.content,
+                aiPotentialStocks = result.content
             )
         }
     }
