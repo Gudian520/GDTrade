@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <queries>
+        <package android:name="com.hexin.plat.android" />
+        <package android:name="com.hexin.android" />
+        <package android:name="com.hexin.stock" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="hexin" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

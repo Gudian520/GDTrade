@@ -34,13 +34,36 @@ class MainActivity : ComponentActivity() {
             symbol.startsWith("6") -> "sh"
             else -> "sz"
         }
-        val quoteIntent = Intent(Intent.ACTION_VIEW).apply {
-            data = Uri.parse("hexin://quote?code=$marketPrefix$symbol")
-            addCategory(Intent.CATEGORY_BROWSABLE)
+        val quoteCode = "$marketPrefix$symbol"
+        val quoteUris = listOf(
+            "hexin://quote?code=$quoteCode",
+            "hexin://stock?code=$quoteCode",
+            "hexin://detail?code=$quoteCode"
+        )
+
+        quoteUris.forEach { uri ->
+            val quoteIntent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            if (tryStartActivity(quoteIntent)) return
         }
-        if (tryStartActivity(quoteIntent)) return
+
+        if (tryOpenInstalledTongHuaShun()) return
 
         Toast.makeText(this, "未能自动打开同花顺，请手动打开同花顺确认。", Toast.LENGTH_LONG).show()
+    }
+
+    private fun tryOpenInstalledTongHuaShun(): Boolean {
+        val packageNames = listOf(
+            "com.hexin.plat.android",
+            "com.hexin.android",
+            "com.hexin.stock"
+        )
+        packageNames.forEach { packageName ->
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null && tryStartActivity(launchIntent)) return true
+        }
+        return false
     }
 
     private fun tryStartActivity(intent: Intent): Boolean {
