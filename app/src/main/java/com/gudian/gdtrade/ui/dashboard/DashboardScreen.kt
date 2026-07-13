@@ -307,7 +307,7 @@ private fun PositionCard(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = quote?.lastPrice?.let { "静态参考价 $it" } ?: "暂无价格样例",
+                    text = quote?.quoteDisplay() ?: "暂无行情数据",
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
@@ -446,6 +446,12 @@ private fun SignalStatus.nextSignal(): SignalStatus {
 private val TradeRecord.localUiKey: String
     get() = listOf(tradeDate, symbol, side, price, quantity, note).joinToString("|")
 
+
+private fun MarketQuote.quoteDisplay(): String {
+    val priceText = lastPrice?.let { "%.3f".format(it) } ?: "--"
+    val changeText = changePercent?.let { "%.2f%%".format(it) } ?: "--"
+    return "参考价 $priceText / 涨跌幅 $changeText"
+}
 @Preview(showBackground = true)
 @Composable
 private fun DashboardPreview() {

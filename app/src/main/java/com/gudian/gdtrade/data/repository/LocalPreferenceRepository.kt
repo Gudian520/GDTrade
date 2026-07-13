@@ -8,12 +8,16 @@ import com.gudian.gdtrade.domain.model.SignalStatus
 import com.gudian.gdtrade.domain.model.StockCandidate
 import com.gudian.gdtrade.domain.model.TradeRecord
 import com.gudian.gdtrade.domain.model.TradeSide
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketRepository {
@@ -33,8 +37,10 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
     override fun observeQuotes(symbols: List<String>): Flow<List<MarketQuote>> {
         return positions.map { currentPositions ->
             val requestedSymbols = if (symbols.isEmpty()) currentPositions.map { it.symbol } else symbols
-            requestedSymbols.distinct().mapNotNull { symbol -> defaultQuotes[symbol] }
-        }
+            requestedSymbols.distinct().filter { it.isNotBlank() }
+        }.map { requestedSymbols ->
+            if (requestedSymbols.isEmpty()) emptyList() else fetchTencentQuotes(requestedSymbols)
+        }.flowOn(Dispatchers.IO)
     }
 
     override fun observeCandidates(): Flow<List<StockCandidate>> = candidates
@@ -86,6 +92,62 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
         saveCandidates()
     }
 
+    private fun fetchTencentQuotes(symbols: List<String>): List<MarketQuote> {
+        return runCatching {
+            val query = symbols.joinToString(",") { it.tencentCode }
+            val url = URL("https://qt.gtimg.cn/q=$query")
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 5000
+                readTimeout = 5000
+                setRequestProperty("User-Agent", "GDTrade-Android-V1")
+            }
+            try {
+                if (connection.responseCode !in 200..299) return@runCatching fallbackQuotes(symbols)
+                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                parseTencentQuotes(body).ifEmpty { fallbackQuotes(symbols) }
+            } finally {
+                connection.disconnect()
+            }
+        }.getOrElse { fallbackQuotes(symbols) }
+    }
+
+    private fun parseTencentQuotes(body: String): List<MarketQuote> {
+        return body.lineSequence().mapNotNull { line ->
+            val payload = line.substringAfter("=\"", missingDelimiterValue = "")
+                .substringBefore("\";", missingDelimiterValue = "")
+            if (payload.isBlank()) return@mapNotNull null
+            val fields = payload.split("~")
+            val symbol = fields.getOrNull(2).orEmpty()
+            val name = fields.getOrNull(1).orEmpty()
+            val price = fields.getOrNull(3)?.toDoubleOrNull()
+            val changePercent = fields.getOrNull(32)?.toDoubleOrNull()
+            val quoteTime = fields.getOrNull(30).orEmpty()
+            if (symbol.isBlank() || name.isBlank()) return@mapNotNull null
+            MarketQuote(
+                symbol = symbol,
+                name = name,
+                lastPrice = price,
+                changePercent = changePercent,
+                sourceLabel = "腾讯行情接口，时间 $quoteTime，可能延迟",
+                isRealtime = false
+            )
+        }.toList()
+    }
+
+    private fun fallbackQuotes(symbols: List<String>): List<MarketQuote> {
+        return symbols.map { symbol ->
+            defaultQuotes[symbol] ?: MarketQuote(
+                symbol = symbol,
+                name = positions.value.firstOrNull { it.symbol == symbol }?.name.orEmpty(),
+                lastPrice = null,
+                changePercent = null,
+                sourceLabel = "行情接口暂不可用，未使用实时行情",
+                isRealtime = false
+            )
+        }
+    }
+
     private fun loadPositions(): List<Position> {
         return preferences.getString(KEY_POSITIONS, null)?.takeIf { it.isNotBlank() }?.let { raw ->
             raw.split(ROW_SEPARATOR).mapNotNull { row ->
@@ -122,7 +184,7 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
         return preferences.getString(KEY_TRADES, null)?.takeIf { it.isNotBlank() }?.let { raw ->
             raw.split(ROW_SEPARATOR).mapNotNull { row ->
                 val parts = row.split(COLUMN_SEPARATOR)
-                if (parts.size != 6) return@mapNotNull null
+                if (parts.size != 7) return@mapNotNull null
                 TradeRecord(
                     tradeDate = runCatching { LocalDate.parse(parts[0]) }.getOrNull() ?: return@mapNotNull null,
                     symbol = parts[1].decodeValue(),
@@ -213,6 +275,12 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
         ).associateBy { it.symbol }
     }
 }
+
+private val String.tencentCode: String
+    get() = when {
+        startsWith("6") || startsWith("5") -> "sh$this"
+        else -> "sz$this"
+    }
 
 val TradeRecord.localKey: String
     get() = listOf(tradeDate, symbol, side, price, quantity, note).joinToString("|")
