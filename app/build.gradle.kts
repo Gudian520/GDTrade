@@ -9,6 +9,8 @@ android {
     compileSdk = 35
 
     defaultConfig {
+        val gptAdvisorEndpoint = providers.gradleProperty("gptAdvisorEndpoint").orElse("").get()
+        buildConfigField("String", "GPT_ADVISOR_ENDPOINT", "\"$gptAdvisorEndpoint\"")
         applicationId = "com.gudian.gdtrade"
         minSdk = 26
         targetSdk = 35
@@ -39,6 +41,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

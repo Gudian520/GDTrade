@@ -17,6 +17,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
@@ -25,6 +26,7 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
     private val positions = MutableStateFlow(loadPositions())
     private val candidates = MutableStateFlow(loadCandidates())
     private val tradeRecords = MutableStateFlow(loadTradeRecords())
+    private val marketRefreshRequests = MutableStateFlow(0)
 
     override fun observeAccountGoals(): Flow<List<AccountGoal>> {
         return MutableStateFlow(listOf(11500, 12500, 13800, 15000).map { AccountGoal(it, false) })
@@ -35,7 +37,7 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
     override fun observeTradeRecords(): Flow<List<TradeRecord>> = tradeRecords
 
     override fun observeQuotes(symbols: List<String>): Flow<List<MarketQuote>> {
-        return positions.map { currentPositions ->
+        return combine(positions, marketRefreshRequests) { currentPositions, _ ->
             val requestedSymbols = if (symbols.isEmpty()) currentPositions.map { it.symbol } else symbols
             requestedSymbols.distinct().filter { it.isNotBlank() }
         }.map { requestedSymbols ->
@@ -85,6 +87,10 @@ class LocalPreferenceRepository(context: Context) : PortfolioRepository, MarketR
     override suspend fun removeCandidate(symbol: String) {
         candidates.value = candidates.value.filterNot { it.symbol == symbol }
         saveCandidates()
+    }
+
+    override suspend fun refreshMarketQuotes() {
+        marketRefreshRequests.value = marketRefreshRequests.value + 1
     }
 
     override suspend fun resetMarketData() {

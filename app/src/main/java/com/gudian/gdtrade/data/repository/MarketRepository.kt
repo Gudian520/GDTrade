@@ -13,5 +13,7 @@ interface MarketRepository {
 
     suspend fun removeCandidate(symbol: String)
 
+    suspend fun refreshMarketQuotes()
+
     suspend fun resetMarketData()
 }

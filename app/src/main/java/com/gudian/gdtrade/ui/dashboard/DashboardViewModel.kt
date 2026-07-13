@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.gudian.gdtrade.data.ai.AiOpinionRepository
+import com.gudian.gdtrade.data.ai.ProxyGptOpinionRepository
 import com.gudian.gdtrade.data.repository.LocalPreferenceRepository
 import com.gudian.gdtrade.data.repository.MarketRepository
 import com.gudian.gdtrade.data.repository.PortfolioRepository
@@ -23,6 +25,7 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(
     private val portfolioRepository: PortfolioRepository,
     private val marketRepository: MarketRepository,
+    private val aiOpinionRepository: AiOpinionRepository = ProxyGptOpinionRepository(),
     private val riskEngine: RiskEngine = RiskEngine()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -46,12 +49,35 @@ class DashboardViewModel(
                     positions = positions,
                     quotes = quotes,
                     candidates = riskCheckedCandidates,
-                    tradeRecords = records
+                    tradeRecords = records,
+                    isAiOpinionLoading = _uiState.value.isAiOpinionLoading,
+                    aiOpinion = _uiState.value.aiOpinion
                 )
             }.collect { _uiState.value = it }
         }
     }
 
+
+    fun refreshMarketQuotes() {
+        viewModelScope.launch { marketRepository.refreshMarketQuotes() }
+    }
+
+    fun requestAiOpinion() {
+        val snapshot = _uiState.value
+        _uiState.value = snapshot.copy(isAiOpinionLoading = true, aiOpinion = "GPT研究意见生成中...")
+        viewModelScope.launch {
+            val result = aiOpinionRepository.requestOpinion(
+                positions = snapshot.positions,
+                quotes = snapshot.quotes,
+                candidates = snapshot.candidates,
+                tradeRecords = snapshot.tradeRecords
+            )
+            _uiState.value = _uiState.value.copy(
+                isAiOpinionLoading = false,
+                aiOpinion = result.content
+            )
+        }
+    }
     fun addPosition(symbol: String, name: String, quantityText: String, note: String) {
         val quantity = quantityText.toIntOrNull() ?: return
         viewModelScope.launch {
@@ -140,7 +166,8 @@ class DashboardViewModel(
             val repository = LocalPreferenceRepository(context.applicationContext)
             return DashboardViewModel(
                 portfolioRepository = repository,
-                marketRepository = repository
+                marketRepository = repository,
+                aiOpinionRepository = ProxyGptOpinionRepository()
             ) as T
         }
     }

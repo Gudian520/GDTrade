@@ -58,5 +58,7 @@ class StaticMarketRepository : MarketRepository {
 
     override suspend fun removeCandidate(symbol: String) = Unit
 
+    override suspend fun refreshMarketQuotes() = Unit
+
     override suspend fun resetMarketData() = Unit
 }

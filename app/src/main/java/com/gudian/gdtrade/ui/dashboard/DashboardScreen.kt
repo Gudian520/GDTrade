@@ -62,7 +62,9 @@ fun DashboardRoute(
         onRemoveCandidate = viewModel::removeCandidate,
         onAddTradeRecord = viewModel::addTradeRecord,
         onRemoveTradeRecord = viewModel::removeTradeRecord,
-        onResetLocalData = viewModel::resetLocalData
+        onResetLocalData = viewModel::resetLocalData,
+        onRefreshMarket = viewModel::refreshMarketQuotes,
+        onRequestAiOpinion = viewModel::requestAiOpinion
     )
 }
 
@@ -76,7 +78,9 @@ fun DashboardScreen(
     onRemoveCandidate: (String) -> Unit,
     onAddTradeRecord: (String, String, String, TradeSide, String, String, String) -> Unit,
     onRemoveTradeRecord: (String) -> Unit,
-    onResetLocalData: () -> Unit
+    onResetLocalData: () -> Unit,
+    onRefreshMarket: () -> Unit,
+    onRequestAiOpinion: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -90,6 +94,7 @@ fun DashboardScreen(
             Header(uiState.disclosure)
         }
         item { GoalSection(uiState.accountGoals) }
+        item { MarketActionSection(uiState, onRefreshMarket, onRequestAiOpinion) }
         item {
             LocalDataEditor(
                 onAddPosition = onAddPosition,
@@ -115,6 +120,33 @@ fun DashboardScreen(
     }
 }
 
+@Composable
+private fun MarketActionSection(
+    uiState: DashboardUiState,
+    onRefreshMarket: () -> Unit,
+    onRequestAiOpinion: () -> Unit
+) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SectionTitle("行情与GPT研究")
+            Text(
+                text = uiState.quotes.firstOrNull()?.sourceLabel ?: "尚无行情数据",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onRefreshMarket) { Text("刷新行情") }
+                OutlinedButton(onClick = onRequestAiOpinion, enabled = !uiState.isAiOpinionLoading) {
+                    Text(if (uiState.isAiOpinionLoading) "生成中" else "GPT研究意见")
+                }
+            }
+            Text(text = uiState.aiOpinion, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
 @Composable
 private fun Header(disclosure: String) {
     Column(
@@ -471,7 +503,9 @@ private fun DashboardPreview() {
             onRemoveCandidate = {},
             onAddTradeRecord = { _, _, _, _, _, _, _ -> },
             onRemoveTradeRecord = {},
-            onResetLocalData = {}
+            onResetLocalData = {},
+            onRefreshMarket = {},
+            onRequestAiOpinion = {}
         )
     }
 }
