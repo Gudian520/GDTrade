@@ -1,8 +1,10 @@
 package com.gudian.gdtrade
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -32,18 +34,23 @@ class MainActivity : ComponentActivity() {
             symbol.startsWith("6") -> "sh"
             else -> "sz"
         }
-        val intent = Intent(Intent.ACTION_VIEW).apply {
+        val quoteIntent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("hexin://quote?code=$marketPrefix$symbol")
-            setPackage("com.hexin.plat.android")
+            addCategory(Intent.CATEGORY_BROWSABLE)
         }
-        runCatching { startActivity(intent) }
-            .onFailure {
-                startActivity(
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("market://details?id=com.hexin.plat.android")
-                    )
-                )
-            }
+        if (tryStartActivity(quoteIntent)) return
+
+        Toast.makeText(this, "未能自动打开同花顺，请手动打开同花顺确认。", Toast.LENGTH_LONG).show()
+    }
+
+    private fun tryStartActivity(intent: Intent): Boolean {
+        return try {
+            startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿package com.gudian.gdtrade.ui.dashboard
+package com.gudian.gdtrade.ui.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -70,16 +70,16 @@ fun DashboardScreen(
         }
         item { GoalSection(uiState.accountGoals) }
         item { SectionTitle("当前持仓") }
-        items(uiState.positions, key = { it.symbol }) { position ->
+        items(uiState.positions, key = { "position-${it.symbol}" }) { position ->
             val quote = uiState.quotes.firstOrNull { it.symbol == position.symbol }
             PositionCard(position, quote, onOpenTongHuaShun)
         }
         item { SectionTitle("动态观察池") }
-        items(uiState.candidates, key = { it.symbol }) { candidate ->
+        items(uiState.candidates, key = { "candidate-${it.symbol}" }) { candidate ->
             CandidateCard(candidate, onOpenTongHuaShun)
         }
         item { SectionTitle("交易记录") }
-        items(uiState.tradeRecords, key = { "${it.tradeDate}-${it.symbol}-${it.quantity}" }) {
+        items(uiState.tradeRecords, key = { "trade-${it.tradeDate}-${it.symbol}-${it.quantity}" }) {
             TradeRecordCard(it)
         }
         item { Spacer(modifier = Modifier.height(16.dp)) }
