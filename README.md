@@ -1,4 +1,4 @@
-# GD Trade
+﻿# GD Trade
 
 GD Trade 是一个面向 A 股持仓监控与决策辅助的 Android 原生 App。当前 V1 只做持仓管理、观察池、风险提示、交易记录和人工确认入口，不实现自动证券交易。
 
@@ -52,11 +52,18 @@ V1 支持以下信号状态：
 
 推荐使用 Android Studio 打开项目并同步 Gradle。
 
-当前仓库没有提交 Gradle Wrapper。如需命令行构建，应先在可信环境中生成 Gradle Wrapper，再运行：
+当前仓库没有提交 Gradle Wrapper。本地如需命令行构建，应先在可信环境中生成 Gradle Wrapper，再运行：
 
 ```powershell
 .\gradlew test
 .\gradlew assembleDebug
+```
+
+远端 PR 已配置 GitHub Actions，会使用 Java 17 和 Gradle 8.10.2 运行：
+
+```powershell
+gradle test --no-daemon
+gradle assembleDebug --no-daemon
 ```
 
 ## 下一步建议
