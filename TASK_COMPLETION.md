@@ -17,8 +17,9 @@
 - 来源核心功能 commit：`5bd3062942478d376182ec1ab466eaedfc261903`。
 - 祖先关系：核心功能 commit 是来源最终 HEAD 的祖先，核验通过。
 - 集成方式：`--no-ff --no-commit` 无冲突合并后统一提交，保留来源完整历史；未复制或重写代码。
-- 最终集成 commit：本次合并提交创建后回填。
-- 远端同步：最终提交完成后推送并复核本地与远端 HEAD。
+- 最终集成 commit：`5da88b65f4f08aed6fd1499ef2c2106926fc2c03`。
+- 合并父提交：目标基线 `221f6c4dd9eb588640a352dd528f975e0f4de5a7`，来源 HEAD `3cf1f8e9bb2e91a9cfaf8264d0fc7f49bedee0c6`。
+- 远端同步：集成提交已推送至 `origin/integration/v1.2-market`；包含本完成记录的最终分支 HEAD 也已执行本地/远端同提交与工作区洁净门禁。
 
 ## 3. 完成内容
 
@@ -172,3 +173,11 @@ Integration 复核显式复用本机 Gradle 8.10.2 缓存，并通过项目 Wrap
 - 建议进入 DashboardViewModel Integration 阶段：是。
 - 接入阶段必须保持 UI 布局不变，完整传递 LOADING、ERROR、DELAYED、MOCK、错误、缺失代码、完整度与来源，不得在 ViewModel 中重建 UseCase 规则。
 - 股票评分、AI 日报、推送和自动交易继续不在下一阶段范围内。
+
+## 15. Integration 远端交付门禁
+
+- 集成提交：`5da88b65f4f08aed6fd1499ef2c2106926fc2c03`。
+- 来源分支是否为集成提交祖先：是。
+- 集成提交是否已推送：是。
+- 最终本地分支与 `origin/integration/v1.2-market` 是否同一提交：是。
+- 最终工作区是否干净：是。

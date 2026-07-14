@@ -45,6 +45,7 @@
 - 集成方式：保留来源分支完整提交历史的非快进合并；不复制代码、不压平来源提交。
 - 集成门禁：完整 Debug/Release 单元测试、Debug APK、真实 UseCase QA 契约、冻结边界复核与 `git diff --check`。
 - 集成结果：来源 HEAD 与核心提交核验通过，非快进合并无冲突；Debug、Release 单元测试各 88 项通过，失败/错误/跳过均为 0；Debug APK 与 `git diff --check` 通过。
+- 集成提交：`5da88b65f4f08aed6fd1499ef2c2106926fc2c03`，已推送至 `origin/integration/v1.2-market`。
 - 集成报告：`docs/integration/V1_2_MARKET_USECASE_INTEGRATION_REPORT.md`。
 
 ### V1.2 行情架构设计

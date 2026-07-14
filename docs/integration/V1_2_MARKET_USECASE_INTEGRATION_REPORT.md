@@ -18,7 +18,9 @@
 - 来源最终 HEAD：`3cf1f8e9bb2e91a9cfaf8264d0fc7f49bedee0c6`。
 - 核心功能 commit：`5bd3062942478d376182ec1ab466eaedfc261903`。
 - 核验结果：来源远端 HEAD 与任务单完全一致；核心功能 commit 是来源最终 HEAD 的祖先；集成前目标本地与远端一致，工作区干净。
-- 最终集成 commit：合并提交创建后在完成记录中回填。
+- 最终集成 commit：`5da88b65f4f08aed6fd1499ef2c2106926fc2c03`。
+- 合并父提交：目标基线 `221f6c4dd9eb588640a352dd528f975e0f4de5a7`，来源 HEAD `3cf1f8e9bb2e91a9cfaf8264d0fc7f49bedee0c6`。
+- 远端同步：集成提交已推送；最终交付再次确认本地与 `origin/integration/v1.2-market` 同一提交且工作区干净。
 
 来源历史中的核心功能提交与完成记录提交均由本次合并保留，目标分支没有通过文件复制或 squash 丢失来源历史。
 
