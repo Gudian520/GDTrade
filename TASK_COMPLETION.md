@@ -14,7 +14,7 @@
 - 基线 commit：`221f6c4dd9eb588640a352dd528f975e0f4de5a7`。
 - 远端核验：`origin/integration/v1.2-market` 为同一提交，基线最新性已确认。
 - 当前开发分支：`codex/usecase-market-v1-2`。
-- 最终功能 commit：待首次功能提交后回填。
+- 最终功能 commit：`5bd3062942478d376182ec1ab466eaedfc261903`。
 - 完成记录 commit：以包含本记录回填内容的分支 HEAD 为准。
 
 ## 3. 完成内容
