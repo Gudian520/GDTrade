@@ -100,7 +100,16 @@
   - 验证结果：Debug、Release 单元测试各 53 项通过，其中新增 Repository 组合测试各 15 项；Debug APK 构建通过。
   - 冻结范围：未修改 `domain/model/market/**`、`domain/repository/MarketDataRepository.kt`、Room Entity/DAO/Database/Schema/Migration、DashboardViewModel、Compose UI、RiskEngine、评分和 AI。
   - 下一阶段：基础层不存在阻塞 UseCase 开发的代码问题，建议进入 GD UseCase Developer 阶段；发布前仍需 Architect 与 QA 按项目门禁确认。
-- [ ] 阶段 4：实现持仓、观察池、详情、概览和风险组合 UseCase。
+- [x] 阶段 4：实现持仓、观察池、详情和概览 UseCase。
+  - 状态：Developer 实现、真实契约激活与完整自动化门禁均已完成，待合入 `integration/v1.2-market`。
+  - 负责角色：GD UseCase Developer Agent。
+  - 基线与分支：`integration/v1.2-market@221f6c4` -> `codex/usecase-market-v1-2`。
+  - 预期文件范围：`domain/usecase/market/**`、真实 UseCase 契约绑定与 Fake Repository 单元测试、`docs/TASK_QUEUE.md`、`docs/ARCHITECTURE.md`、`CHANGELOG.md`、`TASK_COMPLETION.md`。
+  - 实现边界：只组合 `PortfolioRepository`、`MarketRepository` 与冻结的 `MarketDataRepository`；空持仓/观察池不请求行情；保留顺序、状态、错误、缺失代码、完整度、逐只来源和数据状态。
+  - 冻结范围：`domain/model/market/**`、Repository 接口、`DefaultMarketDataRepository`、`DashboardViewModel`、Compose UI、RiskEngine、Room、评分、AI、推送和自动交易。
+  - 完成内容：四个 UseCase、显式空/非法范围、行情研究用途分级、市场概览 `InsufficientData`、Fake Repository 测试与真实 `MarketUseCaseContractTest` 绑定。
+  - 验证结果：Debug、Release 单元测试各 88 项通过，失败/错误/跳过均为 0；Debug APK 构建与 `git diff --check` 通过。
+  - 下一阶段：建议进入 DashboardViewModel Integration；接入时保持 UI 布局不变，不把 UseCase 状态重新压平，并继续冻结评分、AI 和自动交易。
 - [ ] 阶段 5：DashboardViewModel 接入 UseCase，UI 布局保持不变。
 - [ ] 阶段 6：在行情质量契约稳定后实现股票评分。
 
