@@ -2,6 +2,47 @@
 
 本项目遵循语义化版本记录。所有行情与分析能力仅用于研究辅助，不构成自动交易指令。
 
+## [未发布]
+
+### 新增
+
+- 集成 LocalDataSource 能力边界，新增 `PortfolioLocalDataSource`、`WatchlistLocalDataSource`、`LegacyMigrationCoordinator` 与 `RoomLocalDataSource`。
+- 实现 V1.2 `market-domain-v1` 行情领域契约，新增 `StockQuote`、行情状态、来源、请求、快照、错误、完整度和刷新结果模型。
+- 新增 `MarketDataRepository` Domain 端口，支持单股票观察、批量观察和批量刷新。
+- 新增领域契约、不变量和 Repository 端口测试。
+- 新增 `TencentRemoteMarketDataSource`，复用既有 Parser/Mapper 并结构化处理 HTTP、网络、解析和字段错误。
+- 新增 `QuoteMemoryStore`、`FallbackMarketDataSource` 和 `DefaultMarketDataRepository`，完成 Remote、进程内缓存与明确 Mock fallback 组合。
+- 新增 Repository 组合与兼容测试，覆盖全部成功、全部失败、部分缺失、状态汇总、缓存保留和新旧接口刷新去重。
+- 接入 V1.2 QA fixture、抽象契约模板和固定 Remote 输入，并将 StockQuote、腾讯 Parser/Mapper、DefaultMarketDataRepository 绑定为可执行生产契约测试。
+- 新增 V1.2 行情基础层集成报告，记录实际分支、冲突处理、架构边界、重复请求专项和剩余发布门禁。
+
+### 变更
+
+- `RoomTradeRepository` 移除内置腾讯 HTTP、协议解析和 fallback 逻辑，改为复用同一个 `DefaultMarketDataRepository`。
+- 建立 `StockQuote -> MarketQuote` 单向兼容映射，旧接口签名、空列表跟随持仓语义和 Dashboard 装配保持可用。
+- 新旧行情接口共享远程结果、内存缓存和短窗口同批刷新结果，成功及失败路径均不重复发起同一网络请求。
+- `RoomTradeRepository` 的本地读写改为委托 LocalDataSource，DAO 与旧数据迁移职责集中到 `RoomLocalDataSource`。
+
+### 集成验证
+
+- V1.2 Local、Domain、QA、Remote、Repository 基础层已集成到 `integration/v1.2-market`。
+- Debug 与 Release 单元测试各 73 项通过，失败、错误和跳过均为 0。
+- Debug APK 构建通过；重复网络请求专项覆盖新旧接口共享、同批短窗口共享、重叠批次差量请求和失败窗口后重试。
+- `git diff --check` 通过；RiskEngine、DashboardViewModel、Room Schema 和冻结的旧 Repository 接口未修改。
+
+### 兼容性
+
+- 现有 `MarketRepository`、`MarketQuote`、Room Schema、UI、ViewModel 和 RiskEngine 的公共契约保持不变。
+- 未修改 Room Entity、DAO、Database version、Schema 或 Migration；行情缓存只存在于进程内。
+- 未实现 UseCase、Dashboard 迁移、评分、AI 分析或自动证券交易。
+
+### 行情安全
+
+- `MarketDataStatus` 仅允许 SUCCESS、LOADING、ERROR、DELAYED、MOCK 五种状态。
+- Mock、静态样例和 fallback 来源不能声明实时能力；未知行情值使用 `null`，不伪造数值。
+- 当前腾讯行情固定为 `DELAYED` 且 `supportsRealtime=false`；fallback 固定为 `MOCK`，不能伪装为 SUCCESS。
+- ERROR 状态不具备生成有效交易信号的前提，后续业务层仍须经过 RiskEngine 否决检查。
+
 ## [1.5.0] - 2026-07-14
 
 ### 新增

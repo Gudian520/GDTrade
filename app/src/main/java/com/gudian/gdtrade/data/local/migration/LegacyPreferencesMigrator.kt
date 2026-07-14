@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.room.withTransaction
 import com.gudian.gdtrade.data.local.DefaultLocalData
 import com.gudian.gdtrade.data.local.GdTradeDatabase
+import com.gudian.gdtrade.data.local.datasource.LegacyMigrationCoordinator
 import com.gudian.gdtrade.data.local.toEntity
 import com.gudian.gdtrade.domain.model.Position
 import com.gudian.gdtrade.domain.model.SignalStatus
@@ -24,10 +25,10 @@ internal class LegacyPreferencesMigrator(
         PREFERENCES_NAME,
         Context.MODE_PRIVATE
     )
-) {
+) : LegacyMigrationCoordinator {
     private val migrationMutex = Mutex()
 
-    suspend fun migrateIfNeeded() {
+    override suspend fun migrateIfNeeded() {
         migrationMutex.withLock {
             if (preferences.getBoolean(KEY_ROOM_MIGRATION_COMPLETE, false)) return
 

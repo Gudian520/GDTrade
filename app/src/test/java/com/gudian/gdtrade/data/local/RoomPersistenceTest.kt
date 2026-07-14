@@ -2,6 +2,7 @@ package com.gudian.gdtrade.data.local
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.gudian.gdtrade.data.local.entity.PositionEntity
 import com.gudian.gdtrade.data.local.entity.StockCandidateEntity
@@ -12,6 +13,7 @@ import com.gudian.gdtrade.data.local.migration.LegacyPreferencesMigrator.Compani
 import com.gudian.gdtrade.data.local.migration.LegacyPreferencesMigrator.Companion.KEY_ROOM_MIGRATION_COMPLETE
 import com.gudian.gdtrade.data.local.migration.LegacyPreferencesMigrator.Companion.KEY_TRADES
 import com.gudian.gdtrade.data.local.migration.LegacyPreferencesMigrator.Companion.PREFERENCES_NAME
+import com.gudian.gdtrade.data.local.migration.LegacyPreferencesMigrator.Companion.ROW_SEPARATOR
 import com.gudian.gdtrade.domain.model.SignalStatus
 import com.gudian.gdtrade.domain.model.TradeRecord
 import com.gudian.gdtrade.domain.model.TradeSide
@@ -164,6 +166,31 @@ class RoomPersistenceTest {
     }
 
     @Test
+    fun duplicateLegacyTradeRecordsArePreserved() = runBlocking {
+        val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val duplicateRecord = legacyRow(
+            "2026-07-13",
+            "002185".encoded(),
+            "华天科技".encoded(),
+            TradeSide.Sell.name,
+            "24.62",
+            "100",
+            "重复交易".encoded()
+        )
+        preferences.edit()
+            .putString(KEY_POSITIONS, "")
+            .putString(KEY_CANDIDATES, "")
+            .putString(KEY_TRADES, duplicateRecord + ROW_SEPARATOR + duplicateRecord)
+            .commit()
+
+        LegacyPreferencesMigrator(context, database).migrateIfNeeded()
+
+        val records = database.tradeRecordDao().observeAll().first()
+        assertEquals(2, records.size)
+        assertTrue(records.all { it.note == "重复交易" })
+    }
+
+    @Test
     fun completedMigrationDoesNotOverwriteRoomData() = runBlocking {
         val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
         preferences.edit()
@@ -205,6 +232,77 @@ class RoomPersistenceTest {
         assertTrue(database.positionDao().observeAll().first().isEmpty())
         assertTrue(database.stockCandidateDao().observeAll().first().isEmpty())
         assertTrue(database.tradeRecordDao().observeAll().first().isEmpty())
+    }
+
+    @Test
+    fun interruptedTransactionRollsBackAndMigrationCanRetry() = runBlocking {
+        val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        preferences.edit()
+            .putString(
+                KEY_POSITIONS,
+                legacyRow("002185".encoded(), "华天科技".encoded(), "200", "中断后重试".encoded())
+            )
+            .putString(KEY_CANDIDATES, "")
+            .putString(KEY_TRADES, "")
+            .commit()
+
+        val interrupted = runCatching {
+            database.withTransaction {
+                database.positionDao().upsert(
+                    PositionEntity("600000", "中断数据", 1, "不应提交", 0)
+                )
+                error("模拟迁移事务异常中断")
+            }
+        }
+
+        assertTrue(interrupted.isFailure)
+        assertEquals(0, database.positionDao().count())
+        assertFalse(preferences.getBoolean(KEY_ROOM_MIGRATION_COMPLETE, false))
+
+        LegacyPreferencesMigrator(context, database).migrateIfNeeded()
+
+        val positions = database.positionDao().observeAll().first()
+        assertEquals(listOf("002185"), positions.map { it.symbol })
+        assertTrue(preferences.getBoolean(KEY_ROOM_MIGRATION_COMPLETE, false))
+    }
+
+    @Test
+    fun committedDataWithoutMarkerIsRecognizedAfterRestart() = runBlocking {
+        val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        database.positionDao().upsert(
+            PositionEntity("002185", "华天科技", 200, "已提交", 0)
+        )
+        database.stockCandidateDao().upsert(
+            StockCandidateEntity(
+                symbol = "300750",
+                name = "宁德时代",
+                theme = "新能源",
+                reason = "已提交",
+                signalStatus = SignalStatus.WatchOnly.name,
+                riskDeniedBuy = false,
+                displayOrder = 0
+            )
+        )
+        database.tradeRecordDao().insert(
+            TradeRecord(
+                LocalDate.of(2026, 7, 13),
+                "000725",
+                "京东方A",
+                TradeSide.Sell,
+                6.92,
+                200,
+                "已提交"
+            ).toEntity()
+        )
+
+        assertFalse(preferences.getBoolean(KEY_ROOM_MIGRATION_COMPLETE, false))
+
+        LegacyPreferencesMigrator(context, database).migrateIfNeeded()
+
+        assertEquals(1, database.positionDao().count())
+        assertEquals(1, database.stockCandidateDao().count())
+        assertEquals(1, database.tradeRecordDao().count())
+        assertTrue(preferences.getBoolean(KEY_ROOM_MIGRATION_COMPLETE, false))
     }
 
     @Test

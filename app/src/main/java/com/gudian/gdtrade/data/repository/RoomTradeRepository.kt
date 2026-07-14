@@ -1,100 +1,169 @@
 package com.gudian.gdtrade.data.repository
 
 import android.content.Context
-import androidx.room.withTransaction
-import com.gudian.gdtrade.data.local.DefaultLocalData
-import com.gudian.gdtrade.data.local.GdTradeDatabase
-import com.gudian.gdtrade.data.local.migration.LegacyPreferencesMigrator
+import com.gudian.gdtrade.data.local.datasource.PortfolioLocalDataSource
+import com.gudian.gdtrade.data.local.datasource.RoomLocalDataSource
+import com.gudian.gdtrade.data.local.datasource.WatchlistLocalDataSource
 import com.gudian.gdtrade.data.local.storageKey
-import com.gudian.gdtrade.data.local.toDomain
-import com.gudian.gdtrade.data.local.toEntity
 import com.gudian.gdtrade.domain.model.AccountGoal
 import com.gudian.gdtrade.domain.model.MarketQuote
 import com.gudian.gdtrade.domain.model.Position
 import com.gudian.gdtrade.domain.model.StockCandidate
 import com.gudian.gdtrade.domain.model.TradeRecord
-import java.net.HttpURLConnection
-import java.net.URL
+import com.gudian.gdtrade.domain.model.market.FetchPolicy
+import com.gudian.gdtrade.domain.model.market.MarketDataState
+import com.gudian.gdtrade.domain.model.market.MarketDataStatus
+import com.gudian.gdtrade.domain.model.market.QuoteRequest
+import com.gudian.gdtrade.domain.model.market.QuoteRequestReason
+import com.gudian.gdtrade.domain.model.market.QuoteSnapshot
+import com.gudian.gdtrade.domain.model.market.RefreshMarketResult
+import com.gudian.gdtrade.domain.model.market.SingleQuoteRequest
+import com.gudian.gdtrade.domain.model.market.StockQuote
+import com.gudian.gdtrade.domain.repository.MarketDataRepository
+import java.time.Clock
+import java.time.Duration
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.flow.update
 
-open class RoomTradeRepository(context: Context) : PortfolioRepository, MarketRepository {
-    private val applicationContext = context.applicationContext
-    private val database = GdTradeDatabase.getInstance(applicationContext)
-    private val positionDao = database.positionDao()
-    private val tradeRecordDao = database.tradeRecordDao()
-    private val stockCandidateDao = database.stockCandidateDao()
-    private val legacyMigrator = LegacyPreferencesMigrator(applicationContext, database)
-    private val marketRefreshRequests = MutableStateFlow(0)
+open class RoomTradeRepository internal constructor(
+    private val portfolioLocalDataSource: PortfolioLocalDataSource,
+    private val watchlistLocalDataSource: WatchlistLocalDataSource,
+    private val marketDataRepository: MarketDataRepository = DefaultMarketDataRepository.createDefault(),
+    private val legacyQuoteAdapter: StockQuoteLegacyAdapter = StockQuoteLegacyAdapter(),
+    private val clock: Clock = Clock.systemUTC()
+) : PortfolioRepository, MarketRepository, MarketDataRepository {
+    constructor(context: Context) : this(RoomLocalDataSource.create(context))
+
+    private constructor(localDataSource: RoomLocalDataSource) : this(
+        portfolioLocalDataSource = localDataSource,
+        watchlistLocalDataSource = localDataSource
+    )
+
+    private val marketRefreshRequests = MutableStateFlow(0L)
 
     override fun observeAccountGoals(): Flow<List<AccountGoal>> {
         return flowOf(listOf(11500, 12500, 13800, 15000).map { AccountGoal(it, false) })
     }
 
     override fun observePositions(): Flow<List<Position>> {
-        return afterLegacyMigration {
-            positionDao.observeAll().map { entities -> entities.map { it.toDomain() } }
-        }
+        return portfolioLocalDataSource.observePositions()
     }
 
     override fun observeTradeRecords(): Flow<List<TradeRecord>> {
-        return afterLegacyMigration {
-            tradeRecordDao.observeAll().map { entities -> entities.map { it.toDomain() } }
-        }
+        return portfolioLocalDataSource.observeTradeRecords()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeQuotes(symbols: List<String>): Flow<List<MarketQuote>> {
-        return combine(observePositions(), marketRefreshRequests) { currentPositions, _ ->
-            val requestedSymbols = if (symbols.isEmpty()) {
-                currentPositions.map { it.symbol }
-            } else {
-                symbols
+        return flow {
+            var lastSeenRefresh = marketRefreshRequests.value
+            val requests = combine(
+                observePositions(),
+                marketRefreshRequests
+            ) { currentPositions, refreshVersion ->
+                val requestedSymbols = if (symbols.isEmpty()) {
+                    currentPositions.map { it.symbol }
+                } else {
+                    symbols
+                }
+                LegacyQuoteRequest(
+                    symbols = requestedSymbols.map(String::trim)
+                        .filter(SIX_DIGIT_SYMBOL::matches)
+                        .distinct(),
+                    positions = currentPositions,
+                    refreshVersion = refreshVersion
+                )
             }
-            QuoteRequest(
-                symbols = requestedSymbols.distinct().filter { it.isNotBlank() },
-                positions = currentPositions
+            emitAll(
+                requests.transformLatest { request ->
+                    val forceRefresh = request.refreshVersion != lastSeenRefresh
+                    lastSeenRefresh = request.refreshVersion
+                    if (request.symbols.isEmpty()) {
+                        emit(emptyList())
+                        return@transformLatest
+                    }
+
+                    val richRequest = QuoteRequest(
+                        symbols = request.symbols.toCollection(linkedSetOf()),
+                        policy = if (forceRefresh) {
+                            FetchPolicy.NETWORK_FIRST
+                        } else {
+                            FetchPolicy.CACHE_FIRST
+                        },
+                        maxAge = LEGACY_MAX_AGE,
+                        reason = QuoteRequestReason.BATCH
+                    )
+                    val positionNames = request.positions.associate { it.symbol to it.name }
+                    emitAll(
+                        marketDataRepository.observeQuotes(richRequest)
+                            .filter { it.status != MarketDataStatus.LOADING }
+                            .map { state ->
+                                val richQuotes = state.data?.quotes.orEmpty()
+                                request.symbols.mapNotNull { symbol ->
+                                    richQuotes[symbol]?.let { quote ->
+                                        val legacy = legacyQuoteAdapter.toLegacy(
+                                            quote = quote,
+                                            now = clock.instant(),
+                                            maxAge = LEGACY_MAX_AGE,
+                                            requestStatus = state.status
+                                        )
+                                        if (legacy.name == symbol) {
+                                            legacy.copy(name = positionNames[symbol] ?: legacy.name)
+                                        } else {
+                                            legacy
+                                        }
+                                    }
+                                }
+                            }
+                    )
+                }
             )
-        }.map { request ->
-            if (request.symbols.isEmpty()) {
-                emptyList()
-            } else {
-                fetchTencentQuotes(request.symbols, request.positions)
-            }
         }.flowOn(Dispatchers.IO)
     }
 
+    override fun observeQuote(request: SingleQuoteRequest): Flow<MarketDataState<StockQuote>> {
+        return marketDataRepository.observeQuote(request)
+    }
+
+    override fun observeQuotes(request: QuoteRequest): Flow<MarketDataState<QuoteSnapshot>> {
+        return marketDataRepository.observeQuotes(request)
+    }
+
+    override suspend fun refreshQuotes(request: QuoteRequest): RefreshMarketResult {
+        val result = marketDataRepository.refreshQuotes(request)
+        marketRefreshRequests.update { it + 1L }
+        return result
+    }
+
     override fun observeCandidates(): Flow<List<StockCandidate>> {
-        return afterLegacyMigration {
-            stockCandidateDao.observeAll().map { entities -> entities.map { it.toDomain() } }
-        }
+        return watchlistLocalDataSource.observeCandidates()
     }
 
     override suspend fun addPosition(position: Position) {
-        ensureLegacyMigration()
         val normalized = position.copy(
             symbol = position.symbol.trim(),
             name = position.name.trim()
         )
         if (normalized.symbol.isBlank() || normalized.name.isBlank() || normalized.quantity <= 0) return
-        positionDao.upsert(
-            normalized.toEntity(positionDao.maxDisplayOrder() + 1)
-        )
+        portfolioLocalDataSource.upsertPosition(normalized)
     }
 
     override suspend fun removePosition(symbol: String) {
-        ensureLegacyMigration()
-        positionDao.deleteBySymbol(symbol)
+        portfolioLocalDataSource.deletePosition(symbol)
     }
 
     override suspend fun addTradeRecord(record: TradeRecord) {
-        ensureLegacyMigration()
         if (
             record.symbol.isBlank() ||
             record.name.isBlank() ||
@@ -103,156 +172,49 @@ open class RoomTradeRepository(context: Context) : PortfolioRepository, MarketRe
         ) {
             return
         }
-        tradeRecordDao.insert(record.toEntity())
+        portfolioLocalDataSource.insertTradeRecord(record)
     }
 
     override suspend fun removeTradeRecord(recordKey: String) {
-        ensureLegacyMigration()
-        tradeRecordDao.deleteByRecordKey(recordKey)
+        portfolioLocalDataSource.deleteTradeRecord(recordKey)
     }
 
     override suspend fun resetPortfolioData() {
-        ensureLegacyMigration()
-        database.withTransaction {
-            positionDao.deleteAll()
-            tradeRecordDao.deleteAll()
-            positionDao.upsertAll(
-                DefaultLocalData.positions.mapIndexed { index, position ->
-                    position.toEntity(index)
-                }
-            )
-            tradeRecordDao.insertAll(
-                DefaultLocalData.tradeRecords.asReversed().map { record -> record.toEntity() }
-            )
-        }
+        portfolioLocalDataSource.resetPortfolioData()
     }
 
     override suspend fun addCandidate(candidate: StockCandidate) {
-        ensureLegacyMigration()
         val normalized = candidate.copy(
             symbol = candidate.symbol.trim(),
             name = candidate.name.trim()
         )
         if (normalized.symbol.isBlank() || normalized.name.isBlank()) return
-        stockCandidateDao.upsert(
-            normalized.toEntity(stockCandidateDao.maxDisplayOrder() + 1)
-        )
+        watchlistLocalDataSource.upsertCandidate(normalized)
     }
 
     override suspend fun removeCandidate(symbol: String) {
-        ensureLegacyMigration()
-        stockCandidateDao.deleteBySymbol(symbol)
+        watchlistLocalDataSource.deleteCandidate(symbol)
     }
 
     override suspend fun refreshMarketQuotes() {
-        marketRefreshRequests.value += 1
+        marketRefreshRequests.update { it + 1L }
     }
 
     override suspend fun resetMarketData() {
-        ensureLegacyMigration()
-        database.withTransaction {
-            stockCandidateDao.deleteAll()
-            stockCandidateDao.upsertAll(
-                DefaultLocalData.candidates.mapIndexed { index, candidate ->
-                    candidate.toEntity(index)
-                }
-            )
-        }
+        watchlistLocalDataSource.resetWatchlist()
     }
 
-    private fun <T> afterLegacyMigration(source: () -> Flow<T>): Flow<T> {
-        return flow {
-            ensureLegacyMigration()
-            emitAll(source())
-        }
-    }
-
-    private suspend fun ensureLegacyMigration() {
-        legacyMigrator.migrateIfNeeded()
-    }
-
-    private fun fetchTencentQuotes(
-        symbols: List<String>,
-        currentPositions: List<Position>
-    ): List<MarketQuote> {
-        return runCatching {
-            val query = symbols.joinToString(",") { it.tencentCode }
-            val connection = URL("https://qt.gtimg.cn/q=$query")
-                .openConnection() as HttpURLConnection
-            connection.apply {
-                requestMethod = "GET"
-                connectTimeout = 5000
-                readTimeout = 5000
-                setRequestProperty("User-Agent", "GDTrade-Android-V1.5")
-            }
-            try {
-                if (connection.responseCode !in 200..299) {
-                    return@runCatching fallbackQuotes(symbols, currentPositions)
-                }
-                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                parseTencentQuotes(body).ifEmpty {
-                    fallbackQuotes(symbols, currentPositions)
-                }
-            } finally {
-                connection.disconnect()
-            }
-        }.getOrElse {
-            fallbackQuotes(symbols, currentPositions)
-        }
-    }
-
-    private fun parseTencentQuotes(body: String): List<MarketQuote> {
-        return body.lineSequence().mapNotNull { line ->
-            val payload = line.substringAfter("=\"", missingDelimiterValue = "")
-                .substringBefore("\";", missingDelimiterValue = "")
-            if (payload.isBlank()) return@mapNotNull null
-
-            val fields = payload.split("~")
-            val symbol = fields.getOrNull(2).orEmpty()
-            val name = fields.getOrNull(1).orEmpty()
-            val price = fields.getOrNull(3)?.toDoubleOrNull()
-            val changePercent = fields.getOrNull(32)?.toDoubleOrNull()
-            val quoteTime = fields.getOrNull(30).orEmpty()
-            if (symbol.isBlank() || name.isBlank()) return@mapNotNull null
-
-            MarketQuote(
-                symbol = symbol,
-                name = name,
-                lastPrice = price,
-                changePercent = changePercent,
-                sourceLabel = "腾讯行情接口，时间 $quoteTime，可能延迟",
-                isRealtime = false
-            )
-        }.toList()
-    }
-
-    private fun fallbackQuotes(
-        symbols: List<String>,
-        currentPositions: List<Position>
-    ): List<MarketQuote> {
-        return symbols.map { symbol ->
-            DefaultLocalData.fallbackQuotes[symbol] ?: MarketQuote(
-                symbol = symbol,
-                name = currentPositions.firstOrNull { it.symbol == symbol }?.name.orEmpty(),
-                lastPrice = null,
-                changePercent = null,
-                sourceLabel = "行情接口暂不可用，未使用实时行情",
-                isRealtime = false
-            )
-        }
-    }
-
-    private data class QuoteRequest(
+    private data class LegacyQuoteRequest(
         val symbols: List<String>,
-        val positions: List<Position>
+        val positions: List<Position>,
+        val refreshVersion: Long
     )
-}
 
-private val String.tencentCode: String
-    get() = when {
-        startsWith("6") || startsWith("5") -> "sh$this"
-        else -> "sz$this"
+    private companion object {
+        val LEGACY_MAX_AGE: Duration = Duration.ofSeconds(30)
+        val SIX_DIGIT_SYMBOL = Regex("^[0-9]{6}$")
     }
+}
 
 internal val TradeRecord.localKey: String
     get() = storageKey
