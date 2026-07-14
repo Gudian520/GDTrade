@@ -34,6 +34,19 @@
 - 集成结果：Debug 73 项、Release 73 项单元测试全部通过，失败/错误/跳过均为 0；Debug APK 构建与 `git diff --check` 通过。
 - 集成报告：`docs/integration/V1_2_MARKET_FOUNDATION_INTEGRATION_REPORT.md`。
 
+### V1.2 行情 UseCase 集成
+
+- 状态：完成，待 Architect 最终边界确认与 QA 真机/供应商发布门禁。
+- 负责角色：GD Integration Agent。
+- 目标分支：`integration/v1.2-market`。
+- 来源分支：`origin/codex/usecase-market-v1-2`。
+- 集成范围：7 个 `domain/usecase/market/**` 生产文件、4 个对应测试文件及共享中文文档。
+- 冻结范围：`domain/model/market/**`、Repository 接口与实现、`DashboardViewModel`、Compose UI、RiskEngine、Room、股票评分、AI、推送和自动交易。
+- 集成方式：保留来源分支完整提交历史的非快进合并；不复制代码、不压平来源提交。
+- 集成门禁：完整 Debug/Release 单元测试、Debug APK、真实 UseCase QA 契约、冻结边界复核与 `git diff --check`。
+- 集成结果：来源 HEAD 与核心提交核验通过，非快进合并无冲突；Debug、Release 单元测试各 88 项通过，失败/错误/跳过均为 0；Debug APK 与 `git diff --check` 通过。
+- 集成报告：`docs/integration/V1_2_MARKET_USECASE_INTEGRATION_REPORT.md`。
+
 ### V1.2 行情架构设计
 
 - 状态：进行中。
@@ -62,9 +75,9 @@
 - 文件范围：`app/src/test/java/com/gudian/gdtrade/market/**`、`testFixtures/market/**`、`docs/qa/V1_2_MARKET_TEST_PLAN.md`、`docs/qa/TEST_ARCHITECTURE_REVIEW.md`。
 - 已接入：固定行情 fixture、UTF-8 Remote fixture、StockQuote、MarketDataStatus、Remote Parser、Repository 和 UseCase 抽象契约模板。
 - 已激活：StockQuote 生产模型、腾讯 Parser/Mapper、DefaultMarketDataRepository 组合契约；原有 Domain、Remote、Repository 生产测试继续保留。
-- 暂不激活：UseCase 契约；原因是 V1.2 UseCase 尚未实现且本次集成禁止新增 UseCase。
+- 已激活：`RealMarketUseCaseContractTest` 绑定真实 `GetPortfolioQuotesUseCase`，风险场景使用现有 RiskEngine 验证最终否决能力。
 - 安全规则：不得删除契约断言，不得放宽 Mock、DELAYED、ERROR、实时标识或 RiskEngine 否决规则。
-- 验证结果：QA fixture 5 项、生产契约绑定 12 项在 Debug 与 Release 均通过；完整测试每个变体 73 项通过。
+- 验证结果：包含 15 项新增 UseCase/真实契约测试在内，完整 Debug 与 Release 单元测试每个变体 88 项通过。
 
 ### V1.2 Developer 实现
 
@@ -100,7 +113,16 @@
   - 验证结果：Debug、Release 单元测试各 53 项通过，其中新增 Repository 组合测试各 15 项；Debug APK 构建通过。
   - 冻结范围：未修改 `domain/model/market/**`、`domain/repository/MarketDataRepository.kt`、Room Entity/DAO/Database/Schema/Migration、DashboardViewModel、Compose UI、RiskEngine、评分和 AI。
   - 下一阶段：基础层不存在阻塞 UseCase 开发的代码问题，建议进入 GD UseCase Developer 阶段；发布前仍需 Architect 与 QA 按项目门禁确认。
-- [ ] 阶段 4：实现持仓、观察池、详情、概览和风险组合 UseCase。
+- [x] 阶段 4：实现持仓、观察池、详情和概览 UseCase。
+  - 状态：Developer 实现、真实契约激活与 Integration 完整自动化门禁均已完成，已合入 `integration/v1.2-market`。
+  - 负责角色：GD UseCase Developer Agent。
+  - 基线与分支：`integration/v1.2-market@221f6c4` -> `codex/usecase-market-v1-2`。
+  - 预期文件范围：`domain/usecase/market/**`、真实 UseCase 契约绑定与 Fake Repository 单元测试、`docs/TASK_QUEUE.md`、`docs/ARCHITECTURE.md`、`CHANGELOG.md`、`TASK_COMPLETION.md`。
+  - 实现边界：只组合 `PortfolioRepository`、`MarketRepository` 与冻结的 `MarketDataRepository`；空持仓/观察池不请求行情；保留顺序、状态、错误、缺失代码、完整度、逐只来源和数据状态。
+  - 冻结范围：`domain/model/market/**`、Repository 接口、`DefaultMarketDataRepository`、`DashboardViewModel`、Compose UI、RiskEngine、Room、评分、AI、推送和自动交易。
+  - 完成内容：四个 UseCase、显式空/非法范围、行情研究用途分级、市场概览 `InsufficientData`、Fake Repository 测试与真实 `MarketUseCaseContractTest` 绑定。
+  - 验证结果：Developer 与 Integration 均复核通过；Integration 上 Debug、Release 单元测试各 88 项，失败/错误/跳过均为 0，Debug APK 构建与 `git diff --check` 通过。
+  - 下一阶段：建议进入 DashboardViewModel Integration；接入时保持 UI 布局不变，不把 UseCase 状态重新压平，并继续冻结评分、AI 和自动交易。
 - [ ] 阶段 5：DashboardViewModel 接入 UseCase，UI 布局保持不变。
 - [ ] 阶段 6：在行情质量契约稳定后实现股票评分。
 

@@ -15,6 +15,10 @@
 - 新增 Repository 组合与兼容测试，覆盖全部成功、全部失败、部分缺失、状态汇总、缓存保留和新旧接口刷新去重。
 - 接入 V1.2 QA fixture、抽象契约模板和固定 Remote 输入，并将 StockQuote、腾讯 Parser/Mapper、DefaultMarketDataRepository 绑定为可执行生产契约测试。
 - 新增 V1.2 行情基础层集成报告，记录实际分支、冲突处理、架构边界、重复请求专项和剩余发布门禁。
+- 新增 V1.2 行情 UseCase 集成报告，记录来源提交核验、保留历史合并、真实契约激活、冻结边界和完整门禁结果。
+- 新增 `GetPortfolioQuotesUseCase`、`GetWatchlistQuotesUseCase`、`GetStockDetailUseCase` 与 `GetMarketOverviewUseCase`，完成 V1.2 行情业务编排层。
+- 新增行情 UseCase 输出模型与质量分级，保留请求状态、错误、快照、缺失代码、完整度、逐只来源和逐只数据状态。
+- 使用 Fake Portfolio、Watchlist 与 MarketData Repository 激活真实 `MarketUseCaseContractTest`，覆盖空集合、代码标准化去重、顺序、五种状态、完整度与 RiskEngine 否决边界。
 
 ### 变更
 
@@ -22,19 +26,22 @@
 - 建立 `StockQuote -> MarketQuote` 单向兼容映射，旧接口签名、空列表跟随持仓语义和 Dashboard 装配保持可用。
 - 新旧行情接口共享远程结果、内存缓存和短窗口同批刷新结果，成功及失败路径均不重复发起同一网络请求。
 - `RoomTradeRepository` 的本地读写改为委托 LocalDataSource，DAO 与旧数据迁移职责集中到 `RoomLocalDataSource`。
+- 持仓和观察池的代码提取、标准化、去重、空集合处理、顺序恢复与行情质量解释迁入 UseCase，后续 ViewModel 不再需要直接组织富行情 Repository 调用。
 
 ### 集成验证
 
 - V1.2 Local、Domain、QA、Remote、Repository 基础层已集成到 `integration/v1.2-market`。
 - Debug 与 Release 单元测试各 73 项通过，失败、错误和跳过均为 0。
 - Debug APK 构建通过；重复网络请求专项覆盖新旧接口共享、同批短窗口共享、重叠批次差量请求和失败窗口后重试。
+- UseCase 阶段 Debug 与 Release 单元测试各 88 项通过，失败、错误和跳过均为 0；Debug APK 构建通过。
+- `origin/codex/usecase-market-v1-2` 已以非快进合并方式集成，来源核心功能提交与完成记录提交均保留在 `integration/v1.2-market` 历史中。
 - `git diff --check` 通过；RiskEngine、DashboardViewModel、Room Schema 和冻结的旧 Repository 接口未修改。
 
 ### 兼容性
 
 - 现有 `MarketRepository`、`MarketQuote`、Room Schema、UI、ViewModel 和 RiskEngine 的公共契约保持不变。
 - 未修改 Room Entity、DAO、Database version、Schema 或 Migration；行情缓存只存在于进程内。
-- 未实现 UseCase、Dashboard 迁移、评分、AI 分析或自动证券交易。
+- 未修改 Dashboard、Compose UI、评分、AI 分析、RiskEngine、Room 或自动证券交易；UseCase 可以独立交给下一阶段接入。
 
 ### 行情安全
 
@@ -42,6 +49,8 @@
 - Mock、静态样例和 fallback 来源不能声明实时能力；未知行情值使用 `null`，不伪造数值。
 - 当前腾讯行情固定为 `DELAYED` 且 `supportsRealtime=false`；fallback 固定为 `MOCK`，不能伪装为 SUCCESS。
 - ERROR 状态不具备生成有效交易信号的前提，后续业务层仍须经过 RiskEngine 否决检查。
+- DELAYED 只用于观察研究，MOCK 只用于测试或明确占位，ERROR 与 MOCK 均不能支持有效研究结论；SUCCESS 仍不自动等于实时。
+- 市场概览在缺少全市场、板块和资金流能力时明确返回数据不足，不使用少量持仓或观察池伪造市场整体判断。
 
 ## [1.5.0] - 2026-07-14
 

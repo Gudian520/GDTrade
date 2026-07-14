@@ -26,6 +26,9 @@
 - RiskEngine 负责风险决策，不依赖 Android UI 或具体数据来源。
 - Repository 接口作为 Domain/UI 与 Data 实现之间的边界。
 - 新 `domain/repository/MarketDataRepository` 声明单股观察、批量观察和批量刷新端口，由 Data 层 `DefaultMarketDataRepository` 实现。
+- `domain/usecase/market/**` 负责从持仓和观察池提取、标准化、去重股票代码，构建显式行情请求，并在组合结果中恢复原列表顺序。
+- 行情 UseCase 保留完整 `MarketDataState`、`QuoteSnapshot`、错误、缺失代码、完整度及逐只状态和来源；不得把 LOADING、ERROR、DELAYED 或 MOCK 压平为普通成功列表。
+- UseCase 行情质量分为研究输入、仅观察、仅测试和不可用；该分级只描述研究用途，不能替代 RiskEngine，也不生成可执行买卖结论。
 - 旧 `MarketRepository` 与旧 `MarketQuote` 在 V1.2 迁移期间保持签名不变，通过 `StockQuote -> MarketQuote` 单向适配继续服务现有 Dashboard。
 
 ### Data 层
@@ -48,8 +51,35 @@
 
 - 集成分支：`integration/v1.2-market`。
 - 已集成：LocalDataSource、`market-domain-v1`、QA fixture 与生产契约、Remote DTO/Parser/Mapper/Error、Repository 组合、缓存、fallback 和旧接口适配。
-- 未集成且继续冻结：行情 UseCase、DashboardViewModel 迁移、Compose UI、股票评分、AI 日报、推送提醒和自动交易。
-- 架构边界复核结果：Domain 不依赖 Data；Remote DTO 未泄漏；Remote 不读取 Room；Repository 不直接访问 DAO；旧、新行情接口共享同一 `DefaultMarketDataRepository`。
+- 行情 UseCase 已从 `origin/codex/usecase-market-v1-2` 保留完整提交历史合入 `integration/v1.2-market`；真实 QA UseCase 契约已由生产 UseCase 激活并通过完整回归。
+- 未集成且继续冻结：DashboardViewModel 迁移、Compose UI、股票评分、AI 日报、推送提醒和自动交易。
+- 架构边界复核结果：`market-domain-v1` 模型与富行情端口不依赖 Data；UseCase 仅依赖现有 `data.repository` 包中的 `PortfolioRepository`、`MarketRepository` 接口，不依赖其实现、DAO 或 Remote；Remote DTO 未泄漏；旧、新行情接口共享同一 `DefaultMarketDataRepository`。
+
+## V1.2 行情 UseCase 层
+
+```text
+PortfolioRepository.observePositions()
+    -> GetPortfolioQuotesUseCase
+        -> QuoteRequest(reason=PORTFOLIO)
+            -> MarketDataRepository.observeQuotes()
+
+MarketRepository.observeCandidates()
+    -> GetWatchlistQuotesUseCase
+        -> QuoteRequest(reason=WATCHLIST)
+            -> MarketDataRepository.observeQuotes()
+
+显式单股代码
+    -> GetStockDetailUseCase
+        -> SingleQuoteRequest(reason=STOCK_DETAIL)
+            -> MarketDataRepository.observeQuote()
+```
+
+- 标准代码为六位数字；UseCase 可清洗首尾空白和常见 `sh`/`sz` 输入前缀，传给 Repository 的代码始终显式、标准化且去重。
+- Repository 的 `Set` 不承担展示顺序；持仓和观察池输出按原始列表顺序组合，重复项仍映射到同一标准报价。
+- 空持仓和空观察池输出 `QuoteCollectionState.EMPTY`，不调用 `MarketDataRepository`；仅含非法代码时输出明确领域错误，同样不发起请求。
+- `GetStockDetailUseCase` 返回包含原始 `MarketDataState<StockQuote>` 的结果，SUCCESS、LOADING、ERROR、DELAYED、MOCK 及错误对象均不丢失。
+- `GetMarketOverviewUseCase` 当前固定返回 `InsufficientData`，明确缺少全市场覆盖、板块和资金流能力，禁止用持仓或观察池推断全市场结论。
+- `MarketDataUsage.RESEARCH_INPUT` 只允许进入后续候选研究；任何候选结论仍须经过 RiskEngine，RiskEngine 的否决不可被行情质量、评分、AI 或 UI 覆盖。
 
 ## RiskEngine 设计原则
 

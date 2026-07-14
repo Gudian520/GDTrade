@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-- 版本：V1.2 QA 基线 1.0。
+- 版本：V1.2 QA 基线 1.1。
 - 日期：2026-07-14。
 - 负责角色：GD QA Developer Agent。
 - 实施边界：仅新增单元测试、fixture 和 QA 文档，不修改生产代码、Repository、Room、UI、ViewModel 或 RiskEngine。
@@ -28,7 +28,7 @@
 | Domain 契约 | StockQuote、MarketDataStatus | 抽象契约模板 | 空值、时间、来源、实时标记和信号边界 |
 | Parser 契约 | MarketResponseParser | 抽象契约模板 | 四类固定输入产生可分类结果 |
 | Repository 组合 | Remote、Fallback、快照 | 抽象契约模板 | 调用次数、回退范围、每只股票状态 |
-| UseCase | 持仓/观察池/风险组合 | 抽象契约模板 | 显式 symbol、状态透传、RiskEngine 否决优先 |
+| UseCase | 持仓/观察池/风险组合 | 真实生产 UseCase 绑定 | 显式 symbol、状态透传、RiskEngine 否决优先 |
 | 集成与回归 | ViewModel、真机网络 | 未来阶段 | 取消、弱网、重复刷新、可见标识 |
 
 ## 集成分支接入状态
@@ -38,8 +38,8 @@
 - `RemoteMarketParserContractTest` 已通过供应商专用 UTF-8 fixture 绑定腾讯 `QuoteParser` 与 `QuoteMapper`。
 - `MarketRepositoryContractTest` 已绑定 `DefaultMarketDataRepository` 的 Remote、缓存与 fallback 组合。
 - `MarketDataStatusContractTest` 的枚举、实时前置条件和错误边界由生产 Domain 与旧适配器测试等价覆盖；涉及交易信号的部分不在测试适配器中伪造生产策略。
-- `MarketUseCaseContractTest` 继续保持抽象；V1.2 UseCase 尚未实现，本次集成禁止新增 UseCase。
-- 完整 Debug 与 Release 单元测试各 73 项通过，失败、错误和跳过均为 0。
+- `MarketUseCaseContractTest` 已由 `RealMarketUseCaseContractTest` 绑定真实 `GetPortfolioQuotesUseCase`；适配器不重建 UseCase 规则，并组合现有 RiskEngine 验证风险否决优先。
+- 完整 Debug 与 Release 单元测试各 88 项通过，失败、错误和跳过均为 0；其中新增 UseCase 与真实契约测试每个变体 15 项。
 
 ## 测试数据策略
 
